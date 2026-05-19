@@ -1,0 +1,593 @@
+---
+title: "Accelerated Failure Time Model"
+execute:
+  engine: knitr
+  eval: false
+jupyter: false
+---
+
+# Introduction
+
+The accelerated failure time model is a parametric survival analysis technique used to model the relationship between the time to the event of interest (e.g., time to failure) and a set of predictor variables. It assumes that the covariates have a multiplicative effect on the time to the event. In other words, the time to event is accelerated or decelerated by a factor that depends on the values of the covariates. This differs from the Cox proportional hazards model, which assumes that covariates have a multiplicative effect on the hazard rate, not the time to the event.
+
+## Mathematical Expression
+
+Mathematically, the AFT model can be expressed as:
+
+$\log(T) = \mu+\beta'x + \sigma\varepsilon$
+
+Where:
+
+-   $log(T)$ is the logarithm of the survival time
+
+-   $x$ is a matrix of predictor variables
+
+-   $\beta$ is a vector of coefficients representing the effects of the predictor variables on the logarithm of the survival time
+
+-   $\sigma$ is a scalar quantity representing the scale parameter, which influences the variability of the error term $\epsilon$ in the model.
+
+-   $\epsilon$ is the error term assumed to follow a specific distribution (e.g., normal distribution for log-normal, extreme value distribution(Gumbel) for Weibull) that corresponds to the chosen parametric form of the model.
+
+## Accelerated Failure Time Models
+
+Generalized F, Generalized Gamma, Log-logistic, Log-normal, Weibull and Exponential are survival time $T$ probability distributions. Integrating these distributions into a regression framework using Accelerated Failure Time (AFT) creates parametric survival models. The model depends on the anticipated distribution of the error term $\epsilon$. Assuming a log-normal distribution for $T$ provides the log-normal model, while assuming a Weibull distribution yields the Weibull model.
+
+The accelerated failure time models discussed include:
+
+1.  Generalized F-model
+
+2.  Generalized Gamma-model
+
+3.  Log-logistic model
+
+4.  Log-normal model
+
+5.  Weibull model
+
+6.  Exponential model
+
+There is a table summarizing the comparison results obtained from these models.
+
+# Data.
+
+\
+Data source: <https://stats.idre.ucla.edu/sas/seminars/sas-survival/>
+
+The data include 500 subjects from the Worcester Heart Attack Study (WHAS500). This study examined several factors, such as age, gender and BMI, that may influence survival time after a heart attack. Follow-up time for all participants begins at the time of hospital admission after the attack and ends with death or loss to follow-up (censoring). The data in the WHAS500 are subject to right-censoring only. The variables used here are:
+
+-   LENFOL: length of follow-up, terminated either by death or censoring - time variable
+
+-   FSTAT: loss to followup = 0, death = 1 - censoring variable
+
+-   AFB: atrial fibrillation, no = 0, 1 = yes - covariate
+
+-   GENDER: males = 0, females = 1 - covariate
+
+-   HR: initial heart rate at admission - covariate
+
+-   BMI: measure of body fat based on height and weight - covariate
+
+-   AGE: age of the patient at hospitalisation - covariate
+
+### Accessing SAS dataset via library
+
+```{sas}
+libname mylib "C:\your\folder\path";
+data WHAS;
+    set mylib.whas500;
+run;
+```
+
+# SAS procedures used:
+
+## Lifereg Procedure
+
+The LIFEREG procedure is capable of fitting parametric models to failure time data that can be uncensored, right censored, left censored, or interval censored. The response variable models are composed of a linear effect that includes the covariates and a random disturbance term. The random disturbance's distribution can be determined from a class of distributions that includes the extreme value, normal, logistic, and, by using a log transformation, the `exponential`, `Weibull`, `lognormal`, `log-logistic`, and three-parameter `gamma` distributions. The model assumed for the response `y` is: $$
+y = X\beta + \sigma \varepsilon
+$$ where `y` is a vector of response values, often the log of the failure times, `X` is a matrix of covariates or independent variables (usually including an intercept term), $\beta$ is a vector of unknown regression parameters, $\sigma$ is an unknown scale parameter, and is a vector of errors assumed to come from a known distribution (such as the standard normal distribution). The parameters are estimated by the `LIFEREG` procedure using a Newton-Raphson algorithm to maximize likelihood. The standard errors of the parameter estimates are estimated by `PROC LIFEREG` using the inverse of the observed information matrix.
+
+SAS typically models log(response), which imposes constraints (sensitivity to small values, no zeros). This behavior is disabled by the `NOLOG` option; however, it should only be employed when the raw (unlogged) data is appropriate for the statistical distribution.
+
+## Parmsurv macro
+
+[Parmsurv](https://github.com/Merck/Parmsurv) macro is flexible for parametric survival analysis. It has built-in functionality to fit Generalized F model, which is not supported by `PROC LIFEREG` statement. It uses `PROC IML`(Matrix language in SAS). It utilizes Nonlinear optimization via the NLP(NonLinear Programming) procedure/subroutines in SAS/IML, with Newton–Raphson as the default algorithm. This macro can also be used to fit exponential, Weibull, generalized gamma, log-normal, log-logistic and gompertz models.
+
+# Models
+
+## 1. Generalized F Model
+
+By specifying the distribution type using the `dist` option, the `PROC LIFEREG` procedure can model `exponential`, `gamma`, `llogistic`, `lnormal`, `logistic`, `normal` and `weibull` distributions. This procedure does not support modelling for Generalized F model. SAS macro for flexible parametric survival analysis, [Parmsurv](https://github.com/Merck/Parmsurv) supports modelling for Generalized F model. It has built-in distributions such as: `exponential`, `weibull`, `gamma`, `log-normal`, `log-logistic` and `gompertz`. It is using NLPNRA(Nonlinear Programming Newton–Raphson Algorithm), which is SAS/IML’s implementation of a Newton–Raphson algorithm for nonlinear optimization.
+
+You can obtain well-known distributions(special cases of the Generalized F model) by selecting specific values for shape parameters q and p:
+
+-   $q = 0,\; p = 0$ $\rightarrow$ log-normal
+
+-   $q = 0,\; p = 1$ $\rightarrow$ log-logistic
+
+-   $q = 1,\; p = 0$ $\rightarrow$ Weibull
+
+-   $q > 0,\; p = 0$ $\rightarrow$ generalized gamma
+
+```{sas}
+%paramsurv(data=WHAS, t1=LENFOL, censor=FSTAT, covars=AGE GENDER HR BMI AFB, dist=GENF)
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/sas macro gen f model.png")
+```
+
+The `Age` variable is estimated at -0.11176. $e^{-0.11176}$= 0.8942589, implies that a unit increase in AGE multiplies survival time by 0.8942589, implying older patients progress faster to the event. p=0.00052146 and q=0.85646. This shows that, for this case, Generalized F model is equivalent to Generalized Gamma and the full flexibility of Generalized F is unneccessary since p $\approx 0$ and q $>$ 0, close but $<$ 1, such that the hazard shape is not exactly but close to Weibull and also more flexible than log-normal and log-logistic. AIC is 3356.05 and BIC is 3393.98
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 25%
+knitr::include_graphics("AFT/sas macro gen f aic bic.png")
+```
+
+## 2. Generalized Gamma Model
+
+The weibull, gamma and log-normal distributions are all special cases of this three-parameter distribution($\mu,\sigma,q$ ) for location, scale and shape of the parameter, respectively. Special cases for generalized Gamma include:
+
+1.  $q=1$ $\rightarrow$ Weibull
+2.  $q=\sigma=1$ Exponential
+3.  $q=0$ Log-normal
+
+Fit model:
+
+-   Test $H_0 : q=0$ (if statistically significant, we cannot use the log-normal model)
+
+-   Test $H_0 : q=1$ (if statistically significant, we cannot use the Weibull model)
+
+### Using `PROC LIFEREG` procedure
+
+```{sas}
+proc lifereg data=WHAS;
+model LENFOL*FSTAT(0) = AGE GENDER HR BMI AFB/ dist=gamma;
+run;
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/lifereg gamma model.png")
+```
+
+The shape parameter $q$=0.8566. This shows that the shape of the distribution is right skewed. This is closer to assuming Weibull distribution. Zero is not within the confidence interval, therefore we cannot assume log-normal distribution. The scale parameter $\sigma$=2.0670, AIC=3354.045 and BIC=3387.762
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 35%
+knitr::include_graphics("AFT/lifereg gamma aic bic.png")
+```
+
+### Using `Parmsurv` SAS macro
+
+`%paramsurv(dist=GENF)` converges but `%paramsurv(dist=GENGAMMA)` does not converge without initial values or precise initials values. This might be because `GENGAMMA` with one shape parameter, $\lambda$ can be numerically sensitive in the parameter space, necessitating precise initial values for `%paramsurv`. In the macro, $\lambda$ can be positive or negative. This can cause the likelihood to be unstable when it approaches zero. `GENF` with two shape parameters exhibits greater flexibility and numerical stability, rendering initialization unnecessary.
+
+The coefficient estimates are quite similar, especially when `Parmsurv SAS macro` estimates are rounded off to 4 decimal places to be consistent with those from `PROC LIFEREG`. There are subtle differences, especially in the least significant digits of standard errors as well as the p-values. This might arise since they use different numerical procedures. `PROC LIFEREG` uses the Newton-Raphson optimization, while the `Parmsurv SAS macro` uses the `PROC IML` with NLPNRA(Newton–Raphson via the SAS NLP optimizer framework) for estimation. The p-values in `PROC LIFEREG` are from a Chi-square distribution while the `SAS macro` is generating Wald test p-values. For Generalized Gamma, AIC, BIC, the shape and scale parameter are similar for both cases.
+
+```{sas}
+%paramsurv(data=WHAS, t1=LENFOL, censor=FSTAT, covars=AGE GENDER HR BMI AFB, dist=GENGAMMA, init={0 0.5 -0.5 -0.5 0.5 -0.5 1 0.5}) 
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 60%
+knitr::include_graphics("AFT/sas macro gengamma model.png")
+```
+
+## 3. Log-logistic Model
+
+### Using `PROC LIFEREG` procedure
+
+```{sas}
+proc lifereg data=WHAS;
+model LENFOL*FSTAT(0) =  AGE GENDER HR BMI AFB/ dist=llogistic;
+run;
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/lifereg loglogistic model.png")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 35%
+knitr::include_graphics("AFT/lifereg loglogistic aic bic.png")
+```
+
+### Using `Parmsurv` SAS macro
+
+```{sas}
+%paramsurv(data=WHAS, t1=LENFOL, censor=FSTAT, covars=AGE GENDER HR BMI AFB, dist=LLOGIS)
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/sas macro llogistic model.png")
+```
+
+### 4. Log-normal Model
+
+### Using `PROC LIFEREG` procedure
+
+```{sas}
+proc lifereg data=WHAS;
+model LENFOL*FSTAT(0) =  AGE GENDER HR BMI AFB/ dist=lognormal;
+run;
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/lifereg lognormal model.png")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 40%
+knitr::include_graphics("AFT/lifereg lognormal aic bic.png")
+```
+
+### Using `Parmsurv` SAS macro
+
+```{sas}
+%paramsurv(data=WHAS, t1=LENFOL, censor=FSTAT, covars=AGE GENDER HR BMI AFB, dist=LNORM)
+
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/sas macro lognormal model.png")
+```
+
+### 5. Weibull Model
+
+### Using `PROC LIFEREG` procedure
+
+```{sas}
+proc lifereg data=WHAS;
+model LENFOL*FSTAT(0) = AGE GENDER HR BMI AFB/ dist=weibull;
+run;
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/lifereg weibull model.png")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 40%
+knitr::include_graphics("AFT/lifereg weibull aic bic.png")
+```
+
+### Using `Parmsurv` SAS macro
+
+```{sas}
+%paramsurv(data=WHAS,  t1=LENFOL, censor=FSTAT, covars=AGE GENDER HR BMI AFB, dist=WEIBULL)
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/sas macro weibull model.png")
+```
+
+### 6. Exponential Model
+
+### Using `PROC LIFEREG` procedure
+
+```{sas}
+proc lifereg data=WHAS;
+model LENFOL*FSTAT(0) = AGE GENDER HR BMI AFB/ dist=exponential;
+run;
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/lifereg exponential model.png")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 40%
+knitr::include_graphics("AFT/lifereg exponential aic bic.png")
+```
+
+### Using `Parmsurv` SAS macro
+
+```{sas}
+%paramsurv(data=WHAS, t1=LENFOL, censor=FSTAT, covars=AGE GENDER HR BMI AFB, dist=EXP)
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/sas macro exponential model.png")
+```
+
+# Summary : Model Comparison
+
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Model             | SAS procedure  | Model output       | Results                  | SAS procedure        | Model output       | Results                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
++===================+================+====================+==========================+======================+====================+============================+================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================+
+| Generalized F     | `PROC LIFEREG` | AGE(SE)= p-value   | N/A                      | `parmsurv SAS macro` | AGE(SE)= p-value   | -0.11176(0.01397)=\<0.0001 | `PROC LIFEREG` does not include Generalized F distribution                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | GENDER(SE)=p-value |                          |                      | GENDER(SE)=p-value | 0.18131(0.28043)=\<0.5179  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | HR(SE)=p-value     |                          |                      | HR(SE)=p-value     | -0.02476(0.00566)=\<0.0001 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BMI(SE)=p-value    |                          |                      | BMI(SE)=p-value    | 0.08084(0.03083)=0.0087    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | AFB(SE)=p-value    |                          |                      | AFB(SE)=p-value    | -0.41159(0.33701)=0.2220   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | Parameters         | N/A                      |                      | Parameters         | intercept= 16.34368        | Generalized F model has four parameters                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    | $\sigma$=2.06695           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    | $Q$=-0.85646               |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    | $P$=0.00052146             |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | AIC                | N/A                      |                      | AIC                | 3356.05                    | `Paramsurv SAS macro` generates `log-likelihood` unlike `PROC LIFEREG` which generates `-2 Log-likelihood` . This is but just a factor(-2) difference.                                                                                                                                                                                                                                                                                                                                         |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BIC                |                          |                      | BIC                | 3393.98                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | -2 Log Likelihood  |                          |                      | Log Likelihood     | -1669.0                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Generalized Gamma | `PROC LIFEREG` | AGE(SE)= p-value   | -0.1118(0.0141)=\<0.0001 | `parmsurv SAS macro` | AGE(SE)= p-value   | -0.11176(0.01391)=\<0.0001 | The coefficient estimates are quite similar; subtle differences in the p-values and standard errors .Both the `SAS macro` and `PROC LIFEREG` use different numerical procedures. `PROC LIFEREG` uses the Newton Raphson optimization while the `Parmsurv SAS macro` uses the `PROC IML` with NLPNRA(Newton–Raphson via the SAS NLP optimizer framework) for estimation. Also, the corresponding p values are from chisquare distribution and wald test. This applies also to the other models. |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | GENDER(SE)=p-value | 0.1813(0.2807)=0.5183    |                      | GENDER(SE)=p-value | 0.18129(0.28076)=0.5185    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | HR(SE)=p-value     | -0.0248(0.0057)=\<0.0001 |                      | HR(SE)=p-value     | -0.02477(0.00565)=\<0.0001 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BMI(SE)=p-value    | 0.0808(0.0309)=0.0089    |                      | BMI(SE)=p-value    | 0.08084(0.03082)=0.0087    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | AFB(SE)=p-value    | -0.4116(0.3363)=0.2211   |                      | AFB(SE)=p-value    | -0.41155(0.33621)=0.2209   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | Parameters         | intercept=16.3439        |                      | Parameters         | intercept=16.34398         | The parameters are similar                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    | scale=2.0670             |                      |                    | $\sigma$=2.06702           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    | shape=0.8566             |                      |                    | $\lambda$=0.85658          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | AIC                | 3354.045                 |                      | AIC                | 3354.04                    | The log-likelihood, AIC and BIC are similar.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BIC                | 3387.762                 |                      | BIC                | 3387.76                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | -2 Log Likelihood  | 3338.045                 |                      | Log Likelihood     | -1669.0                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| log-Logistic      | `PROC LIFEREG` | AGE(SE)= p-value   | -0.1151(0.0141)=\<0.0001 | `parmsurv SAS macro` | AGE(SE)= p-value   | -0.11509(0.01403)=\<0.0001 | The coefficient estimates are similar.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | GENDER(SE)=p-value | 0.0992(0.3047)=0.7448    |                      | GENDER(SE)=p-value | 0.09918(0.30496)=0.7450    | There are subtle differences in the standard errors and resultant p-values, especially at the tail decimal places.                                                                                                                                                                                                                                                                                                                                                                             |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | HR(SE)=p-value     | -0.0274(0.0063)=\<0.0001 |                      | HR(SE)=p-value     | -0.02744(0.00634)=\<0.0001 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BMI(SE)=p-value    | 0.0854(0.0320)=0.0076    |                      | BMI(SE)=p-value    | 0.08537(0.3194)=0.0075     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | AFB(SE)=p-value    | -0.3603(0.3778)=0.3402   |                      | AFB(SE)=p-value    | -0.36033(0.37782)=0.3402   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | Parameters         | intercept=16.0654        |                      | Parameters         | intercept=16.06541         | The location parameters are similar.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    | scale=1.5942             |                      |                    | $\sigma$=2.25461           | The parameterization for log-logistic is different for both `SAS macro` and `PROC LIFEREG`. `SAS macro` uses a rescaled parameterization of $\sqrt{2}$ factor.                                                                                                                                                                                                                                                                                                                                 |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | AIC                | 3359.275                 |                      | AIC                | 3359.27                    | AIC, BIC and -2log-likehood are similar                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BIC                | 3388.777                 |                      | BIC                | 3388.78                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | -2 Log Likelihood  | 3345.275                 |                      | Log Likelihood     | -1672.6                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log-normal        | `PROC LIFEREG` | AGE(SE)= p-value   | -0.1143(0.0140)=\<0.0001 | `parmsurv SAS macro` | AGE(SE)= p-value   | -0.11432(0.01398)\<0.0001  | The coefficient estimates are similar.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | GENDER(SE)=p-value | 0.0662(0.3213)=0.8366    |                      | GENDER(SE)=p-value | 0.06624(0.32114)=0.8366    | There are subtle differences in the standard errors and resultant p-values, especially at the tail decimal places.                                                                                                                                                                                                                                                                                                                                                                             |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | HR(SE)=p-value     | -0.0271(0.0066)=\<0.0001 |                      | HR(SE)=p-value     | -0.02715(0.00662)=\<0.0001 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BMI(SE)=p-value    | 0.0827(0.0323)=0.0104    |                      | BMI(SE)=p-value    | 0.08270(0.03228)=0.0104    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | AFB(SE)=p-value    | -0.3919(0.4064)=0.3349   |                      | AFB(SE)=p-value    | -0.39186(0.40699)=0.3356   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | Parameters         | intercept=16.0795        |                      | Parameters         | intercept=16.07952         | Both the location and scale parameters are similar                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    | scale=2.9169             |                      |                    | $\sigma$=2.91693           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | AIC                | 3367.589                 |                      | AIC                | 3367.59                    | AIC, BIC and -2log-likelihood are similar                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BIC                | 3397.091                 |                      | BIC                | 3397.09                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | -2 Log Likelihood  | 3353.589                 |                      | Log Likelihood     | -1676.8                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Weibull           | `PROC LIFEREG` | AGE(SE)= p-value   | -0.1101(0.0137)=\<0.0001 | `parmsurv SAS macro` | AGE(SE)= p-value   | -0.11008(0.01353)=\<0.0001 | The coefficient estimates are similar.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | GENDER(SE)=p-value | 0.1956(0.2719)=0.4718    |                      | GENDER(SE)=p-value | 0.19562(0.27185)=0.4718    | There are subtle differences in the standard errors and resultant p-values, especially at the tail decimal places.                                                                                                                                                                                                                                                                                                                                                                             |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | HR(SE)=p-value     | -0.0241(0.0054)=\<0.0001 |                      | HR(SE)=p-value     | -0.02406(0.00534)=\<0.0001 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BMI(SE)=p-value    | 0.0787(0.0303)=0.0093    |                      | BMI(SE)=p-value    | 0.07873(0.03015)=\<0.0090  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | AFB(SE)=p-value    | -0.4114(0.3247)=0.2051   |                      | AFB(SE)=p-value    | -0.41137(0.32454)=0.2050   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | Parameters         | shape=0.5180             |                      | Parameters         | intercept=16.29388         | The scale parameters are similar.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    | scale=1.9305             |                      |                    | $\sigma$=1.93055           | The `SAS macro` does not report the shape parameter. Shape parameter is basically the inverse of scale for Weibull distribution.                                                                                                                                                                                                                                                                                                                                                               |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | AIC                | 3352.390                 |                      | AIC                | 3352.39                    | Similar                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BIC                | 3381.893                 |                      | BIC                | 3381.89                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | -2 Log Likelihood  | 3338.390                 |                      | Log Likelihood     | -1669.2                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Exponential       | `PROC LIFEREG` | AGE(SE)= p-value   | -0.0652(0.0067)=\<0.0001 | `parmsurv SAS macro` | AGE(SE)= p-value   | -0.06524(0.00660)=\<0.0001 | The coefficient estimates are similar.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | GENDER(SE)=p-value | 0.1755(0.1425)=\<0.2179  |                      | GENDER(SE)=p-value | 0.17552(0.14230)=0.2174    | There are subtle differences in the standard errors and resultant p-values, especially at the tail decimal places.                                                                                                                                                                                                                                                                                                                                                                             |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | HR(SE)=p-value     | -0.0151(0.0027)=\<0.0001 |                      | HR(SE)=p-value     | -0.01515(0.00272)=\<0.0001 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BMI(SE)=p-value    | 0.0475(0.0156)=0.0023    |                      | BMI(SE)=p-value    | 0.04751(0.01548)=0.0022    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | AFB(SE)=p-value    | -0.1994(0.1697)=0.2400   |                      | AFB(SE)=p-value    | -0.19937(0.16960)=0.2398   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | Parameters         | scale=1                  |                      | Parameters         |                            | `PROC LIFEREG` treats the exponential as a special case of the Weibull distribution(shape=1), such that the inverse of $\sigma$ is 1. The `SAS macro` models the exponential directly via the rate parameter and therefore does not report the shape and scale.                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    | shape=1                  |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   |                | AIC                | 3510.435                 |                      | AIC                | 3510.44                    | Similar                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | BIC                | 3535.723                 |                      | BIC                | 3535.72                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                |                    |                          |                      |                    |                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|                   |                | -2 Log Likelihood  | 3498.435                 |                      | Log Likelihood     | -1749.2                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++-------------------+----------------+--------------------+--------------------------+----------------------+--------------------+----------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+# Model diagnostics
+
+## Cox-Snell residuals
+
+The Cox–Snell plots illustrate the empirical cumulative hazard from the weibull and generalized gamma model closely aligning with the red line (represents the theoretical cumulative hazard of an Exponential(1) distribution),with slight variations at the tails compared to log-logistic, log-normal and exponential. These implies that generalized gamma and weibull fits the data appropriately. These plots are generated from `PROC LIFEREG` procedure, therefore Generalized F model plot was not included.
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: center
+#| out-width: 70%
+knitr::include_graphics("AFT/cox-snells.png")
+```
+
+```{sas}
+proc lifereg data=WHAS;
+    class AFB GENDER;
+    model LENFOL*FSTAT(0)= AGE GENDER HR BMI AFB / dist=weibull;
+    output out=res_weibull cres=coxsnell; run;
+proc lifetest data=res_weibull outsurv=km_weibull plots=none;
+    time coxsnell*FSTAT(0); run;
+data km_weibull;
+    set km_weibull;
+    observed   = -log(survival);
+    lowerlimit = -log(sdf_ucl);
+    upperlimit = -log(sdf_lcl);
+    expected   = coxsnell;
+    model="Weibull"; run;
+
+proc lifereg data=WHAS;
+    class AFB GENDER;
+    model LENFOL*FSTAT(0)= AGE GENDER HR BMI AFB / dist=loglogistic;
+    output out=res_loglogistic cres=coxsnell; run;
+proc lifetest data=res_loglogistic outsurv=km_loglogistic plots=none;
+    time coxsnell*FSTAT(0); run;
+data km_loglogistic;
+    set km_loglogistic;
+    observed   = -log(survival);
+    lowerlimit = -log(sdf_ucl);
+    upperlimit = -log(sdf_lcl);
+    expected   = coxsnell;
+    model="Log-Logistic"; run;
+
+proc lifereg data=WHAS;
+    class AFB GENDER;
+    model LENFOL*FSTAT(0)= AGE GENDER HR BMI AFB / dist=lnormal;
+    output out=res_lognormal cres=coxsnell; run;
+proc lifetest data=res_lognormal outsurv=km_lognormal plots=none;
+    time coxsnell*FSTAT(0); run;
+data km_lognormal;
+    set km_lognormal;
+    observed   = -log(survival);
+    lowerlimit = -log(sdf_ucl);
+    upperlimit = -log(sdf_lcl);
+    expected   = coxsnell;
+    model="Lognormal"; run;
+
+proc lifereg data=WHAS;
+    class AFB GENDER;
+    model LENFOL*FSTAT(0)= AGE GENDER HR BMI AFB / dist=gamma;
+    output out=res_gamma cres=coxsnell; run;
+proc lifetest data=res_gamma outsurv=km_gamma plots=none;
+    time coxsnell*FSTAT(0); run;
+data km_gamma;
+    set km_gamma;
+    observed   = -log(survival);
+    lowerlimit = -log(sdf_ucl);
+    upperlimit = -log(sdf_lcl);
+    expected   = coxsnell;
+    model="Gamma"; run;
+
+proc lifereg data=WHAS;
+    class AFB GENDER;
+    model LENFOL*FSTAT(0)= AGE GENDER HR BMI AFB / dist=exponential;
+    output out=res_exponential cres=coxsnell; run;
+proc lifetest data=res_exponential outsurv=km_exponential plots=none;
+    time coxsnell*FSTAT(0); run;
+data km_exponential;
+    set km_exponential;
+    observed   = -log(survival);
+    lowerlimit = -log(sdf_ucl);
+    upperlimit = -log(sdf_lcl);
+    expected   = coxsnell;
+    model="Exponential"; run;
+
+data km_all;
+    set km_weibull km_loglogistic km_lognormal km_gamma km_exponential; run;
+
+proc sgpanel data=km_all;
+    panelby model / columns=3 rows=2;
+    step x=coxsnell y=observed /
+        lineattrs=(color=black thickness=1);
+    band x=coxsnell lower=lowerlimit upper=upperlimit /
+        fillattrs=(color=gray transparency=0.7);
+    step x=coxsnell y=lowerlimit /
+         lineattrs=(color=gray pattern=dash);
+    step x=coxsnell y=upperlimit /
+         lineattrs=(color=gray pattern=dash);
+    series x=coxsnell y=expected /
+        lineattrs=(color=red thickness=1);
+    colaxis label="Cox–Snell residual";
+    rowaxis label="Cumulative hazard of residuals";
+run;
+```
+
+# References
+
+1.`PROC LIFEREG` documentation: <https://documentation.sas.com/api/collections/pgmsascdc/v_061/docsets/statug/content/lifereg.pdf?locale=en>
+
+2.`Parmsurv SAS macro`: <https://github.com/Merck/Parmsurv/blob/main/paramsurv.sas>
