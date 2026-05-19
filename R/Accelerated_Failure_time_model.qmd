@@ -2,168 +2,727 @@
 title: "Accelerated Failure Time Model"
 ---
 
-The accelerated failure time model is a parametric survival analysis technique used to model the relationship between the time to event of interest (e.g., time to failure) and a set of predictor variables. It assumes that the covariates have a multiplicative effect on the time to the event. In other words, the time to event is accelerated or decelerated by a factor that depends on the values of the covariates.This differs from the Cox proportional hazards model, which assumes that covariates have a multiplicative effect on the hazard rate, not the time to the event.
+# Introduction
+
+The accelerated failure time model is a parametric survival analysis technique used to model the relationship between the time to the event of interest (e.g., time to failure) and a set of predictor variables. It assumes that the covariates have a multiplicative effect on the time to the event. In other words, the time to event is accelerated or decelerated by a factor that depends on the values of the covariates. This differs from the Cox proportional hazards model, which assumes that covariates have a multiplicative effect on the hazard rate, not the time to the event.
 
 ## Mathematical Expression
 
 Mathematically, the AFT model can be expressed as:
 
-$\log(T) = X\beta + \sigma\varepsilon$
+$$\log(T) = \mu+\beta'x + \sigma\varepsilon$$
 
 Where:
 
--   T is the survival time
+-   $log(T)$ is the logarithm of the survival time
 
--   log(T) is the logarithm of the survival time
+-   $x$ is a matrix of predictor variables
 
--   X is a matrix of predictor variables
+-   $\beta$ is a vector of coefficients representing the effects of the predictor variables on the logarithm of the survival time
 
--   β is a vector of coefficients representing the effects of the predictor variables on the logarithm of the survival time
+-   $\sigma$ is a scalar quantity representing the scale parameter, which influences the variability of the error term $\epsilon$ in the model.
 
--   σ is a scaler quantity representing the scale parameter, which influences the variability of the error term ε in the model.
+-   $\epsilon$ is the error term assumed to follow a specific distribution (e.g., normal distribution for log-normal, extreme value distribution(Gumbel) for Weibull) that corresponds to the chosen parametric form of the model.
 
--   ε is the error term assumed to follow a specific distribution (e.g., normal distribution for log-normal, extreme value distribution for Weibull) that corresponds to the chosen parametric form of the model.
+## Accelerated Failure Time Models
 
-## Example of AFT model using "Log-Normal Distribution"
+Generalized F, Generalized Gamma, Log-logistic, Log-normal, Weibull and Exponential are survival time $T$ probability distributions. Integrating these distributions into a regression framework using Accelerated Failure Time (AFT) creates parametric survival models. The model depends on the anticipated distribution of the error term $\epsilon$. Assuming a log-normal distribution for $T$ provides the log-normal model, while assuming a Weibull distribution yields the Weibull model.
+
+The accelerated failure time models discussed include:
+
+1.  Generalized F-model
+
+2.  Generalized Gamma-model
+
+3.  Log-logistic model
+
+4.  Log-normal model
+
+5.  Weibull model
+
+6.  Exponential model
+
+There is a table summarizing the comparison results obtained from these models.
+
+# Data.
+
+Data source: <https://stats.idre.ucla.edu/sas/seminars/sas-survival/>
+
+The data include 500 subjects from the Worcester Heart whas Study (WHAS500). This study examined several factors, such as age, gender and BMI, that may influence survival time after a heart whas. Follow-up time for all participants begins at the time of hospital admission after the whas and ends with death or loss to follow-up (censoring). The data in the WHAS500 are subject to right-censoring only. The variables used here are:
+
+-   LENFOL: length of follow-up, terminated either by death or censoring - time variable
+
+-   FSTAT: loss to followup = 0, death = 1 - censoring variable
+
+-   AFB: atrial fibrillation, no = 0, 1 = yes - covariate
+
+-   GENDER: males = 0, females = 1 - covariate
+
+-   HR: initial heart rate at admission - covariate
+
+-   BMI: measure of body fat based on height and weight - covariate
+
+-   AGE: age of the patient at hospitalisation - covariate
+
+```{r}
+#| message: false
+#| warning: false
+library(haven)
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+whas <- haven::read_sas(here("SAS", "weighted log rank", "whas500.sas7bdat"))
+head(whas)
+```
+
+# R Packages and Functions used:
+
+## flexsurv::flexsurvreg
+
+`flexsurv`is an R package for fully-parametric modelling of survival data. Standard survival distributions, such as the `generalized gamma` and `generalized F` distributions with three and four parameters, are integrated. A linear or log-linear function of covariates can be used to represent any parameter of any distribution. `flexsurv` is intended to function as a general framework for survival modelling in R. Some other contributed R packages can fit survival models, such as `eha`. `GenF.orig` and `GenF` are both reparametrizations of the Generalized-F survival distribution. `GenF.orig` uses the old Prentice (1975) parameters (m1, m2), while `GenF` employs a new set of parameters (q, p) that is more stable, easier to understand, and can handle a larger range of survival shapes. Check `?flexsurv::GenF` and `?flexsurv::GenF.orig`.
+
+## eha::aftreg
+
+`eha`(Event History Analysis) is a package for event history and survival analysis. It enhances the recommended `survival` package. Using `aftreg` function, the default distribution is Weibull, with other alternatives. A special case like the exponential can be obtained by choosing "weibull" in combination with shape = 1. The default parameterization is `lifeAcc`. This parameterization is different from that of `survreg`. It reverses the sign of estimates. To correct this, the alternative parameterization `lifeExp` can be used.
+
+## survival::survreg
+
+The `survreg` in the `survival` R package supports only two-parameter (location/scale) distributions. `flexsurvreg`, uses the familiar syntax of `survreg` from the standard `survival` package.
+
+# Models
+
+## 1. Generalized F Model
+
+This is a richer family of models, which includes the models of interest as sub-models and performs some formal tests, which allows us to assess whether the sub-models would be suitable for the description of the data or not. Many well-known survival distributions can be defined within the Generalized F family, characterized by the parameters $\beta$, $\sigma$, $m_1$, and $m_2$, where:
+
+-   $\beta$ controls the time scale
+-   $\sigma$ is a scale parameter (\> 0)
+-   $m_1$ and $m_2$ are two shape parameters
+
+The Generalized F density is given by:
+
+$$
+f_{GF}(t) =
+\frac{
+e^{-\beta m_1 / \sigma}
+\left(\frac{t}{\sigma}\right)^{-1}
+\left(\frac{m_1}{m_2}\right)^{m_1}
+}{
+\sigma \, B(m_1, m_2)
+\left[
+1 + \left(\frac{m_1}{m_2}\right)
+\left(e^{-\beta t}\right)^{1/\sigma}
+\right]^{m_1 + m_2}
+}
+$$ which shows the probability distribution of survival times under Generalized F distribution. Two transformed variables, q and p, are used to re-express the parameters $m_1$ and $m_2$, where:
+
+$$
+q = \left( (m_1^{-1} - m_2^{-1})(m_1^{-1} + m_2^{-1}) \right)^{-1/2}
+$$
+
+$$
+p = 2 \left( m_1^{-1} + m_2^{-1} \right)^{-1}
+$$
+
+You can obtain well-known distributions(special cases of the Generalized F model) by selecting specific values for q and p:
+
+-   $q = 0,\; p = 0$ $\rightarrow$ log-normal
+
+-   $q = 0,\; p = 1$ $\rightarrow$ log-logistic
+
+-   $q = 1,\; p = 0$ $\rightarrow$ Weibull
+
+-   $q > 0,\; p = 0$ $\rightarrow$ generalized gamma
+
+```{r}
+library(flexsurv)
+(.GF <- flexsurvreg(Surv(LENFOL, FSTAT) ~AGE + GENDER + HR + BMI + AFB,
+  data = whas, dist="genf"))
+BIC(.GF)
+```
+
+The effect of a covariate implies an acceleration or deceleration from the baseline event time. The AFT hazard increases with increasing values of the covariates when $\beta<0$, such that the shorter the time, the higher the hazard. The interpretation is based on $\ e^{X.\beta}$. The `Age` variable has an estimate of -0.111. $e^{-0.111}$= 0.895, implying that a unit increase in AGE multiplies survival time by 0.895, implying older patients progress faster to the event. p=0.0075 and q=0.855. This shows that, for this case, Generalized F model is equivalent to Generalized Gamma and the full flexibility of Generalized F is unneccessary since p$\approx 0$ and q$>$ 0, close but $<$ 1, such that the hazard shape is not exactly but close to Weibull and also more flexible than log-normal and log-logistic. AIC is 3356.06 and BIC is 3393.992
+
+## 2. Generalized Gamma Model
+
+The weibull, gamma and log-normal distributions are all special cases of this three-parameter distribution($\mu,\sigma,q$ ) for location, scale and shape of the parameter, respectively. The original paramterization from Stacy(1962) is supplied as `dist="gengamma.orig"` , but the updated parameterization(Prentice 1974) is preferred: `dist="gengamma"`. This is because the Prentice (1974) parameterization enhances estimate stability as the distribution approaches log-normal, as the value of 0 is no longer proximate to the boundary of the parameter space. Check `?flexsurv::GenGamma.orig`and `?flexsurv::GenGamma`. The survivor function relies on value of $q$ using the standard normal distribution when $q=0$ and the incomplete gamma function when $q\neq0$. The survivor function $$
+    S(t)=
+    \begin{cases}
+    1 - I(\gamma,u), & q > 0 \\
+    1 - \Phi(z), & q = 0 \\
+    I(\gamma,u), & q < 0
+    \end{cases}
+    $$
+
+Where:
+
+i).The cumulative gamma distribution with shape and scale 1 : $$I(\gamma,u) = \frac{1}{\Gamma(\gamma)} \int_{0}^{u} x^{\gamma - 1} e^{-x} \, dx$$
+
+ii). $z = \frac{\log(t) - \mu}{\sigma}$
+
+iii). $$u=
+\begin{cases}
+\gamma \exp(q|z|), & q>0, \\
+\gamma \exp(-|q|z), & q<0,
+\end{cases}
+\qquad
+\gamma=q^{-2}.
+$$ iv). $\Phi(z) \text{ is the standard normal CDF}$
+
+Special cases for generalized Gamma include:
+
+1.  $q=1$ $\rightarrow$ Weibull
+2.  $q=\sigma=1$ $\rightarrow$Exponential
+3.  $q=0$ $\rightarrow$Log-normal
+
+Fit a model :
+
+-   Test $H_0 : q=0$ (the log-normal model)
+
+-   Test $H_0 : q=1$ ( Weibull model)
+
+```{r}
+library(flexsurv)
+(.GG <- flexsurvreg(Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB ,
+  data = whas, dist="gengamma"))
+BIC(.GG)
+```
+
+q=0.85820. This shows that the shape of the distribution is right skewed. This is closer to assuming Weibull distribution. Zero is not within the confidence interval, therefore we cannot use log-normal model. $\sigma=2.06415$.
+
+## 3. Log-logistic model
+
+Based on accelerated failure time model formulation, logistic model is represented as:
+
+$$\log(T) = \mu+\beta'x + \sigma\varepsilon$$ where:
+
+-   $\mu$ is a location parameter
+
+-   $\beta'x$ is the linear predictor
+
+-   $\sigma > 0$ is a scale parameter
+
+-   $\varepsilon$ is a random error term
+
+The error term $\epsilon$ is assumed to follow a standard logistic distribution with variance: $\operatorname{Var}(\epsilon) = \frac{\pi^2}{3}$
+
+-   Shape parameter: $p = \frac{1}{\sigma}$
+-   Scale parameter: $\lambda = \exp(\mu + \beta'x)$
+
+The survival function is:
+
+$$
+S(t) =
+\frac{1}{1 + \left(\frac{t}{\lambda}\right)^p}
+$$ The hazard function is: $$
+h(t)=\frac{\lambda^{-p} p t^{p-1}}
+{1+\left(\frac{\lambda}{t}\right)^p},
+\qquad t>0,\; p>0.
+$$
+
+### Package: flexsurv
+
+```{r}
+library(flexsurv)
+(.LL <- flexsurvreg(Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR +  BMI + AFB ,
+  data = whas, dist="llogis"))
+BIC(.LL)
+```
+
+Since shape parameter p= 0.627\<1, the hazard is monotonically decreasing over time. This implies risks are higher in early times, but seems to decline afterwards. $e^{age}$= 0.891, implies that survival time is multiplied by 0.891 for every one-year increase in AGE. This model is fitted by specifying `dist="llogis"` under `flexsurv` package. This package does not print out BIC automatically unlike AIC.
+
+### Package: eha(Event History Analysis)
+
+Log-logistic distribution model can also be fitted using the function `aftreg` from `eha` package and specifying the `dist="loglogistic"`. Default distribution is Weibull in `eha` package with alternatives such as `gompertz` ,`ev` , `loglogistic` and `lognormal`.
+
+```{r}
+library("eha")
+af<-aftreg(Surv(LENFOL, FSTAT)~AGE + GENDER + HR +  BMI + AFB , data = whas, dist = "loglogistic")
+af
+AIC(af)
+BIC(af)
+```
+
+The estimated shape parameter is 0.6275\<1, indicating that the hazard is highest at the early stages and decreases over time. The estimated time ratio for AGE is `exp(AGE)`= 1.122, implying that each additional year of age multiplies survival time by 1.122, corresponding to a 12.2% increase in survival duration.
+
+Under `flexsurvreg`, the corresponding multiplicative effect was (0.891). This difference arises from the different parameterizations used by `aftreg` and `flexsurvreg` for the log-logistic AFT model. Although both functions fit the same underlying model, their regression coefficients have opposite signs. `flexsurvreg` reports coefficients whose exponentiated values represent direct time ratios `exp`($\beta$), whereas `aftreg` reports coefficients corresponding to reciprocal time ratios, `exp`($-\beta$). Consequently, the `aftreg` parameterization is mathematically equivalent to the reciprocal interpretation used in `flexsurvreg`. The default parameterization in `aftreg` is `lifeAcc`; changing it to `lifeExp` produces estimates consistent with `flexsurv::flexsurvreg`.
+
+The `AGE` variable is statistically significant at the 5% significance level, indicating that age significantly affects survival time, whereas `GENDER` is not statistically significant. In addition, the shape and scale parameters are estimated on the log scale. The `aftreg` function does not automatically provide AIC and BIC values.
+
+#### When param="lifeExp"
+
+Generates similar results to `flexsurv :: flexsurvreg`
+
+```{r}
+library("eha")
+af<-aftreg(Surv(LENFOL, FSTAT)~AGE + GENDER + HR +  BMI + AFB , data = whas, dist = "loglogistic",param = "lifeExp")
+af
+AIC(af)
+BIC(af)
+```
+
+### Package: survival
+
+For the weibull, exponential, log-normal, and log-logistic distributions, `flexsurvreg` functions as a wrapper for `survreg`. The maximum likelihood estimates are derived from `survreg`, verified for optimization convergence using `flexsurvreg`, then transformed into `flexsurvreg`’s preferred parameterization. The maximal log-likelihoods are same; however, the parameterization differs. The\
+The initial coefficient (Intercept) presented by `survreg` is log(μ), `survreg`’s "scale" is\
+`dweibull`’s (thus `flexsurvreg`)’s 1 / shape. The covariate effects, however, maintain the same "accelerated failure time" meaning, analogous to linear effects on `log(μ)`. The multiplicative effects `exp()` are displayed in the output as `exp(est)`. `aftreg` uses a reversed convention. `survival::survreg` does not automatically print out AIC and BIC.
 
 ```{r}
 library(survival)
-attach(lung)
-
-# Fit an AFT model using lognormal distribution
-model_aft <- survival::survreg(
-  survival::Surv(time, status) ~ age + sex + ph.ecog,
-  data = lung,
-  dist = "lognormal"
-)
-# Model summary
-summary(model_aft)
+logl <- survreg(
+Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+ dist = "loglogistic")
+summary(logl)
+AIC(logl)
+BIC(logl)
 ```
 
-The summary output will provide the estimated coefficients, standard errors, and p-values for each predictor variable.
+**Check:** exp(16.06536) of intercept = 9486307, which is the scale parameter($9.49\times10^6$) generated by `flexsurvreg` function. `flexsurvreg` function also generate shape parameter=0.627, which is the reciprocal of scale parameter (1.59) under `survreg`. The coefficient estimates for covariates are consistent in both cases.
 
-## Acceleration Factor Calculation
+## 4. Log-normal model
+
+The log‑normal model: $\log(T) = \mu + \beta'x + \sigma \varepsilon$ that assumes that the error term in the log‑time scale follows a standard normal distribution: $\varepsilon \sim \mathcal{N}(0,1)$ such that `log T` is normally distributed and `T~` log-normal distribution. The log-normal probability density function is given as: $$
+f(t)=\frac{1}{\sigma \sqrt{2\pi}\, t}
+\exp\!\left[
+-\frac{(\log t-\mu)^2}{2\sigma^2}
+\right],
+\qquad t>0,\ \sigma>0
+$$
+
+The survivor and hazard functions are denoted as:
+
+$$
+S(t)=1-\Phi\!\left(
+\frac{\log t-\mu}{\sigma}
+\right),
+\qquad
+h(t)=\frac{f(t)}{S(t)}
+$$
+
+The hazard function is non-monotonic; it generally ascends to a maximum and subsequently descends. The log-normal model is particularly advantageous for processes where risk initially increases and subsequently decreases over time.
+
+### Package: flexsurv
 
 ```{r}
-# Compute acceleration factor (exponentiated coefficients)
-acceleration_factor <- exp(coef(model_aft))
-acceleration_factor
+library(flexsurv)
+(.LN <- flexsurvreg(Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,
+  data = whas, dist="lognormal"))
+BIC(.LN)
 ```
 
-## Interpretation
+### Package: eha(Event History Analysis)
 
--   For age,acceleration factor $< 1$ indicates that for each one-unit increase in age, the survival time is slowed down by a factor of 0.98 (or a 2% decreasein survival time).
--   For sex, acceleration factor $> 1$ indicates that males have 68% accelerated survival time.
--   An acceleration factor of ph.ecog $< 1$ suggests a 30% decelerated survival time associated with ph.ecog.
-
-## Plotting AFT Model Graphically
+#### Default parameterization: `lifeAcc`
 
 ```{r}
-suppressPackageStartupMessages({
-  library(survival)
-  library(survminer)
-  library(ggplot2)
-})
-
-# Fit the AFT model on the lung dataset
-aft_model <- survival::survreg(
-  survival::Surv(time, status) ~ age + sex + ph.ecog,
-  data = lung,
-  dist = "lognormal"
-)
-
-# Create a new data frame with predicted survival times
-df <- data.frame(
-  time = lung$time,
-  age = lung$age,
-  sex = lung$sex,
-  ph.ecog = lung$ph.ecog,
-  status = lung$status
-)
-df$surv_times <- predict(aft_model, newdata = df)
-
-# Plot the survival curves based on the AFT model
-survminer::ggsurvplot(
-  survival::survfit(survival::Surv(surv_times, status) ~ 1, data = df),
-  data = df,
-  xlab = "Time",
-  ylab = "Survival Probability"
-)
+library("eha")
+(af<-aftreg(Surv(LENFOL, FSTAT)~AGE + GENDER + HR +  BMI + AFB , data = whas, dist = "lognormal"))
+AIC(af)
+BIC(af)
 ```
 
-The survival curve plotted based on the AFT model for the lung dataset illustrates how the probability of survival changes as time progresses, showing the impact of different covariate levels on survival probabilities.
-
-## Example of AFT model using "Weibull Distribution"
+#### Alternative parameterization: `lifeExp`
 
 ```{r}
-# Fit an AFT model using weibull distribution
-model_aft_wb <- survival::survreg(
-  survival::Surv(futime, fustat) ~ age + resid.ds + rx,
-  data = ovarian,
-  dist = "weibull"
-)
-# Model summary
-summary(model_aft_wb)
+library("eha")
+(af<-aftreg(Surv(LENFOL, FSTAT)~AGE + GENDER + HR +  BMI + AFB , data = whas, dist = "lognormal", param="lifeExp"))
+AIC(af)
+BIC(af)
 ```
 
-## Acceleration Factor Calculation
+### Package: survival
 
 ```{r}
-# Compute acceleration factor (exponentiated coefficients)
-acceleration_factor_wb <- exp(coef(model_aft_wb))
-acceleration_factor_wb
+library(survival)
+logn <- survreg(
+Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+ dist = "lognormal")
+summary(logn)
+AIC(logn)
+BIC(logn)
 ```
 
-## Interpretation
+## 5. Weibull model
 
--   For age, an acceleration factor of 0.93 indicates that for each one-unit increase in age, the survival time is decelerated by a factor of 0.93(or a 7% decrease in the survival time)
+In the log-linear model representation, if T has a Weibull distribution, then $\epsilon$ follow an extreme value distribution called `Gumbel` distribution. Model parameters are: $$
+p = \frac{1}{\sigma}
+$$
 
--   For residual disease status, an acceleration factor of 0.60 suggests that a decrease in residual disease status is associated with a 40% decelerated survival time.
+$$
+\lambda = \exp\left(-\mu -\beta'x\right)
+$$ The hazard function can be derived as: $$
+\lambda_T(t, x) = p \lambda^p t^{p-1}
+= \sigma^{-1} t^{1/\sigma - 1} \exp\left(\frac{\mu +\beta'x}{\sigma}\right)
+$$ This can be rewritten as: $$\lambda_T(t, x) = \lambda_0(t)\exp\left({\beta^*}'x\right)$$
 
--   an acceleration factor of 1.67 suggests a 67% accelerated survival time for patients receiving a different type of radiation therapy (rx = 2) compared to the reference group (rx = 1).
+where: $$
+\beta^* = -\frac{\beta}{\sigma}
+$$ This shows that the model can be expressed as a proportional hazard model, therefore it possesses both proportional hazard and accelerated failure time properties. Therefore there is direct correspondence between parameters under the two models. This implies that if the coefficient estimates in the linear component of accelerated failure time model are multiplied by shape parameter(`-P`), we obtain the corresponding coefficient estimates for proportional hazard model. The AFT hazard increases with increasing values of the covariates when $\beta< 0$, whereas in the PH model this happens when $\beta > 0$.
 
-## Survival Curve Plotting on 'Ovarian' Dataset
+### Package: flexsurv
 
 ```{r}
-
-# Fit the AFT model (weibull distribution) on your data
-model_aft <- survival::survreg(
-  survival::Surv(futime, fustat) ~ age + resid.ds + rx,
-  data = ovarian,
-  dist = "weibull"
-)
-
-# Create survival curves for different levels of predictor variables
-plot_data <- with(
-  ovarian,
-  data.frame(
-    age = seq(min(age), max(age), length.out = 100),
-    resid.ds = mean(resid.ds),
-    rx = mean(rx)
-  )
-)
-
-# Predict survival times based on the AFT model
-plot_data$survival <- predict(model_aft, newdata = plot_data)
-
-# Plot the survival curves
-ggplot(
-  plot_data,
-  aes(x = age, y = survival, color = factor(rx), linetype = factor(rx))
-) +
-  geom_line() +
-  labs(
-    x = "Age",
-    y = "Survival Probability",
-    color = "Radiation Therapy",
-    linetype = "Radiation Therapy"
-  ) +
-  scale_linetype_manual(values = c("solid", "dashed", "dotted")) +
-  scale_color_manual(values = c("blue", "red", "green"))
+library(flexsurv)
+Wb <- flexsurvreg(Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,
+  data = whas, dist="weibull")
+Wb
+BIC(Wb)
 ```
 
-The survival curve plotted based on the AFT model for the ovarian dataset how the probability of survival changes as age increases.
+### Package: eha
 
-## Conclusion
+#### Default parameterization: `lifeAcc`
 
-In AFT models, unlike Cox proportional hazards models, survival times follow an assumed parametric distribution (e.g., Weibull, log-logistic, log-normal), directly modelling the effect of covariates on the time scale.
+```{r}
+library("eha")
+(ln<-aftreg(Surv(LENFOL, FSTAT)~AGE + GENDER + HR +  BMI + AFB , data = whas, dist = "weibull"))
+AIC(ln)
+BIC(ln)
+```
+
+#### Alternative parameterization: `lifeExp`
+
+```{r}
+library("eha")
+(ln<-aftreg(Surv(LENFOL, FSTAT)~AGE + GENDER + HR +  BMI + AFB , data = whas, dist = "weibull",param="lifeExp"))
+AIC(ln)
+BIC(ln)
+```
+
+### Package: survival
+
+```{r}
+library(survival)
+weib <- survreg(Surv(LENFOL, FSTAT) ~AGE + GENDER + HR +  BMI + AFB,data = whas,
+ dist = "weibull")
+summary(weib)
+AIC(weib)
+BIC(weib)
+```
+
+To obtain the estimated value of the shape (p) parameter of the “baseline” Weibull distribution:
+
+```{r}
+(p <- 1/weib$scale)
+```
+
+The estimated model coefficients on the time scale:
+
+```{r}
+(time.Weib <- exp(weib$coefficients)) 
+```
+
+To estimate model coefficients on the log-hazard scale:
+
+```{r}
+(PH.Weib <- -p*weib$coefficients)
+```
+
+Hazard rations generated by exponetial transformation of the proportional hazard:
+
+```{r}
+(haz.ratio.Weib <- exp(PH.Weib))
+```
+
+## 6. Exponential model
+
+This is a special case of `weibull`distribution. In a case where shape parameter(p)=1, the hazard function takes a constant value of scale parameter $(\lambda)$ and the survival time have an exponential distribution. Therefore, the hazard function is constant overtime.
+
+### Package: flexsurv
+
+```{r}
+library(flexsurv)
+Wb <- flexsurvreg(Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,
+  data = whas, dist="exponential")
+Wb
+BIC(Wb)
+```
+
+### Package: eha
+
+A special case like the`exponential`can be obtained by choosing`"weibull"`in combination with `shape = 1`.
+
+```{r}
+library("eha")
+(ln<-aftreg(Surv(LENFOL, FSTAT)~AGE + GENDER + HR +  BMI + AFB ,shape = 1, data = whas, dist = "weibull"))
+AIC(ln)
+BIC(ln)
+```
+
+### Package: survival
+
+```{r}
+library(survival)
+weib <- survreg(Surv(LENFOL, FSTAT) ~AGE + GENDER + HR +  BMI + AFB,data = whas,
+ dist = "exponential")
+summary(weib)
+AIC(weib)
+BIC(weib)
+```
+
+# Summary : Model Comparison
+
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Distribution      | Function                 | Variables | Estimates | Parameters                    | Log-likelihood          | AIC      | BIC      | Note                                                                                                                                                                                                                                                                         |
++===================+==========================+===========+===========+===============================+=========================+==========+==========+==============================================================================================================================================================================================================================================================================+
+| Generalized F     | `flexsurv:: flexsurvreg` | AGE       | -0.111    | $\mu$=16.3                    | -1669.03                | 3356.06  | 3393.992 | AIC is obtained directly from `flexsurvreg` output, while BIC is computed using the `BIC()` function.                                                                                                                                                                        |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | -0.180    | $\sigma$=2.06                 |                         |          |          | The BFGS optimisation algorithm is the default in `flexsurvreg`, but this can be changed to `method="Nelder-Mead"` which can be more robust to poor initial values.                                                                                                          |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.0246   | $q$=-0.855                    |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | -0.0813   | $p$=0.00750                   |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.412    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Generalized Gamma | `flexsurv:: flexsurvreg` | AGE       | -0.11135  | $\mu$=16.28745                | -1669.023               | 3354.047 | 3387.763 | `aftreg` and `survreg` functions are not flexible to model for generalized F and Gamma distributions.                                                                                                                                                                        |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | 0.17960   | $\sigma$= 2.06415             |                         |          |          | The location, scale and $q$ shape parameter are similar for Generalized F and Gamma models.                                                                                                                                                                                  |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.02467  | $q$=0.85820                   |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | 0.08147   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.40629  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log Logistic      | `flexsurv:: flexsurvreg` | AGE       | -0.115    | shape=0.627                   | -1672.637               | 3359.275 | 3388.777 | `flexsurv::flexsurvreg` does not generate p-values. The confidence intervals can be used instead. The coefficient estimates and corresponding standard errors are similar for the three functions: `flexsurvreg`, `aftreg` and `survreg`.                                    |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | 0.0992    | scale=$9.49 \times 10^6$      |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.0274   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | -0.0854   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.360    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `eha:: aftreg`           | AGE       | 0.115     | log(scale)=16.062             | -1672.6                 | 3359.275 | 3388.777 | Both AIC and BIC are not directly computed from `aftreg` output but using `AIC()` and `BIC` function.                                                                                                                                                                        |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | -0.100    | log(shape) =-0.466            |                         |          |          | Parameterization `lifeAcc` and `lifeExp` does not affect AIC and BIC                                                                                                                                                                                                         |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | 0.027     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | -0.085    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | 0.360     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `survival::survreg`      | AGE       | -0.11509  | log(scale)=0.46640            | Model=-1672.6           | 3359.275 | 3388.777 | Both AIC and BIC are not directly computed from `survreg` output but using `AIC()` and `BIC` function.                                                                                                                                                                       |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | 0.09918   | Scale= 1.59                   | Intercept only=-1753.2  |          |          | Uses Newton Raphson Approximation for MLE.                                                                                                                                                                                                                                   |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.02744  |                               |                         |          |          | The scale parameter for `flexsurvreg` function is similar to that of `aftreg`. The scale of `survreg` and shape of `flexsurvreg` exhibit the relationship $p = \frac{1}{\sigma}$ described in the model definition. The log(scale) of `survreg` is -log(shape) for `aftreg`. |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | 0.08537   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.36033  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           | 0.46640   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Log Normal        | `flexsurv:: flexsurvreg` | AGE       | -0.11432  | mean(log)=16.07951            | -1676.795               | 3367.589 | 3397.091 | `flexsurv::flexsurvreg` does not generate p-values. The confidence intervals can be used instead. The coefficient estimates and corresponding standard errors are similar for the three functions: `flexsurvreg`, `aftreg` and `survreg`.                                    |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | 0.06624   | sdlog = 2.91693               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.02715  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | 0.08270   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.39186  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `eha:: aftreg`           | AGE       | 0.114     | log(scale) = 16.079           | -1676.8                 | 3367.589 | 3397.091 | The scale parameter for log-normal under `flexsurvreg` log(sd) is similar to the scale parameter for `survreg`. The log of location parameter under `flexsurvreg` is similar to `aftreg` log(scale). The log(scale) for `survreg` is similar to -log(shape) for `aftreg`.    |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | -0.066    | log(shape) = -1.071           |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | 0.027     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | -0.083    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | 0.392     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `survival::survreg`      | AGE       | -0.11432  | scale=2.92                    | Model= -1676.8          | 3367.589 | 3397.091 |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | 0.06624   | log(scale)=1.07053            | Intercept only=-1751.2  |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.02715  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | 0.08270   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | 0.39186   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Weibull           | `flexsurv:: flexsurvreg` | AGE       | -0.110    | shape=0.518                   | -1669.195               | 3352.39  | 3381.893 | `flexsurv::flexsurvreg` does not generate p-values. The confidence intervals can be used instead. The coefficient estimates and corresponding standard errors are similar for the three functions: `flexsurvreg`, `aftreg` and `survreg`.                                    |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | -0.196    | scale=$$                      |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           | 1.19 \times 10^7              |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.0241   | $$                            |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | 0.0787    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.411    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `eha:: aftreg`           | AGE       | 0.110     | log(scale) = 16.281           | -1669.2                 | 3352.391 | 3381.893 |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | -0.192    | log(shape) = -0.657           |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | 0.024     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | -0.079    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | 0.407     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `survival::survreg`      | AGE       | -0.11008  | Scale= 1.93                   | Model= -1669.2          | 3352.39  | 3381.893 | The relationship between `flexsurvreg` shape parameter and `survreg` scale parameter is inverse. `survreg`'s log(scale) is similar to the -log(scale) for `aftreg` function. The scale parameter for `aftreg` and `flexsurvreg` are similar.                                 |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | 0.19562   | log(scale)=0.65780            | Intercept only=-1752.5  |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.02406  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | 0.07873   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.41137  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Exponential       | `flexsurv:: flexsurvreg` | AGE       | 0.0652    | rate = $$4.03\times10^{-6} $$ | -1749.218               | 3510.435 | 3535.723 | The `flexsurvreg` function models the exponential directly via the rate parameter and therefore does not report the shape and scale.                                                                                                                                         |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | -0.176    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | 0.0151    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | -0.0475   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | 0.199     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `eha:: aftreg`           | AGE       | 0.065     | log(scale) = 12.421           | -1749.2                 | 3510.435 | 3535.723 | `flexsurv::flexsurvreg` does not generate p-values. The confidence intervals can be used instead. The coefficient estimates and corresponding standard errors are similar for the three functions: `flexsurvreg`, `aftreg` and `survreg`.                                    |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | -0.175    | shape=1                       |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | 0.015     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | -0.048    |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | 0.199     |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | `survival::survreg`      | AGE       | -0.06524  | scale=1                       | Model= -1749.2          | 3510.435 | 3535.723 |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | GENDER    | 0.17552   |                               | Intercept only= -1854.7 |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | HR        | -0.01515  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | BMI       | 0.04751   |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          |           |           |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
+|                   |                          | AFB       | -0.19937  |                               |                         |          |          |                                                                                                                                                                                                                                                                              |
++-------------------+--------------------------+-----------+-----------+-------------------------------+-------------------------+----------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+# Model Diagnostics
+
+## 1. Standardized residuals
+
+**Goodness of fit**
+
+This is to check whether the model's assumed error distribution is consistent with the data. Three plots are demonstrated as shown, and Weibull distribution seem consistent with the data compared to log-logistic and log-normal which have slight deviations at the tails.
+
+```{r}
+library(rms)
+par(mfrow = c(1, 2)) 
+gof.Weib <- psm(Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI +AFB,data = whas, dist="weibull", y=TRUE)
+res.Weib <-resid(gof.Weib,type="cens")
+survplot(npsurv(res.Weib ~1),conf ="none",col="red",ylab="Survival probability (Gumbel)", xlab="Residual")
+lines(res.Weib, col = "black",lwd=0.1)
+
+gof.logn <- psm(Surv(LENFOL, FSTAT) ~AGE + GENDER + HR + BMI + AFB ,
+data = whas, dist="lognormal", y=TRUE)
+res.logn <-resid(gof.logn,type="cens")
+survplot(npsurv(res.logn ~1),conf ="none",col="red",ylab="Survival probability (Normal)", xlab="Residual")
+lines(res.logn, col = "blue",lwd=0.1)
+
+gof.logl <- psm(Surv(LENFOL, FSTAT) ~AGE + GENDER + HR + BMI + AFB ,data = whas, dist="loglogistic", y=TRUE)
+res.logl <-resid(gof.logl,type="cens")
+survplot(npsurv(res.logl ~1),conf ="none",col="red",ylab="Survival probability log-logistic", xlab="Residual")
+lines(res.logl, col = "black",lwd=0.1)     
+```
+
+## 2. Cox-Snell residuals
+
+The Cox–Snell plot illustrates the empirical cumulative hazard from the weibull, generalized gamma and generalized F model closely aligning with the red line (represents the theoretical cumulative hazard of an Exponential(1) distribution), exhibiting only slight variations at the tails. These models fits the data appropriately.
+
+```{r}
+library(survival)
+library(flexsurv)
+par(mfrow = c(2, 3)) 
+fitg <- flexsurvreg(
+  formula = Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+  dist = "weibull")
+cs <- coxsnell_flexsurvreg(fitg)
+surv <- survfit(Surv(cs$est, whas$FSTAT) ~ 1)
+plot(surv, fun = "cumhaz",
+     xlab = "Cox–Snell residual",
+     ylab = "Cumulative hazard of residuals",
+     main = "Weibull")
+abline(0, 1, col = "red", lwd = 2)
+
+
+fitg <- flexsurvreg(
+  formula = Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+  dist = "llogis")
+cs <- coxsnell_flexsurvreg(fitg)
+surv <- survfit(Surv(cs$est, whas$FSTAT) ~ 1)
+plot(surv, fun = "cumhaz",
+     xlab = "Cox–Snell residual",
+     ylab = "Cumulative hazard of residuals",
+     main="log-logistic")
+abline(0, 1, col = "red", lwd = 2)
+
+fitg <- flexsurvreg(
+  formula = Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+  dist = "lognormal")
+cs <- coxsnell_flexsurvreg(fitg)
+surv <- survfit(Surv(cs$est, whas$FSTAT) ~ 1)
+plot(surv, fun = "cumhaz",
+     xlab = "Cox–Snell residual",
+     ylab = "Cumulative hazard of residuals",
+     main="log-normal")
+abline(0, 1, col = "red", lwd = 2)
+
+fitg <- flexsurvreg(
+  formula = Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+  dist = "genf")
+cs <- coxsnell_flexsurvreg(fitg)
+surv <- survfit(Surv(cs$est, whas$FSTAT) ~ 1)
+plot(surv, fun = "cumhaz",
+     xlab = "Cox–Snell residual",
+     ylab = "Cumulative hazard of residuals",
+     main="Generalized F")
+abline(0, 1, col = "red", lwd = 2)
+
+fitg <- flexsurvreg(
+  formula = Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+  dist = "gengamma")
+cs <- coxsnell_flexsurvreg(fitg)
+surv <- survfit(Surv(cs$est, whas$FSTAT) ~ 1)
+plot(surv, fun = "cumhaz",
+     xlab = "Cox–Snell residual",
+     ylab = "Cumulative hazard of residuals",
+     main="Generalized Gamma")
+abline(0, 1, col = "red", lwd = 2)
+
+fitg <- flexsurvreg(
+  formula = Surv(LENFOL, FSTAT) ~ AGE + GENDER + HR + BMI + AFB,data = whas,
+  dist = "exponential")
+cs <- coxsnell_flexsurvreg(fitg)
+surv <- survfit(Surv(cs$est, whas$FSTAT) ~ 1)
+plot(surv, fun = "cumhaz",
+     xlab = "Cox–Snell residual",
+     ylab = "Cumulative hazard of residuals",
+     main="Exponential")
+abline(0, 1, col = "red", lwd = 2)
+```
+
+# Conclusion and Recommendation
+
+Parametric survival models can be fit using: `flexsurvreg`, `survreg` and `aftreg` functions, although they differ in paramterization, intrepretation of regression coefficients and flexibility. `survreg` is the classical R implementation of accelerated failure time models. It generates stable estimates for models with distributions like Weibull, log-normal and log-logistic, but its distribution choices are limited; it does not work for generalized F and generalized Gamma models. `flexsurvreg`, on the other hand, is modern and offers more flexibility in the implementation of parametric models. It stretches the capabilities of `survreg` by incorporating: generalized gamma, generalized F, gompertz, spline-based models and custom distributions. Its regression coefficients are consistent with `survreg`. Their maximal log-likelihood are the same; however, the parameterization differs, especially for the initial coefficient and the `survreg` scale as demonstrated in this documented under `survival::survreg`. `aftreg` uses a different parameterization which differs from standard AFT models in `survreg` and `flexsurvreg`, thus generating reversed regression coefficients. The default parameterization is `lifeAcc`. Using `lifeExp` ensures that the regression coefficients are consistent with those generated by the `flexsurvreg` and `survreg` functions. Just like `survreg`, it offers a limited set of distributions.
+
+`flexsurvreg` is recommended mostly because of the flexibility it offers, and given that by modeling for generalized gamma and F, it includes models of interest as sub-models and performs some formal tests, which allows us to assess whether the sub-models would be suitable for the description of the data or not.
+
+Exponential distribution is a special case of the weibull distribution, which assumes constant hazard over time, which is unrealistic in most situations. From the summary table, Weibull model had the least AIC , hence provided a best fit for the data. In comparison to log-normal and log-logistic models, Generalized Gamma and Generalized F had lower AIC's. This conforms to the results obtained from the Cox Snell residuals model diagnostics, that they provided better fit compared to log-normal and log-logistic.
+
+# References
+
+1.  `eha` package documentation: <https://cran.r-project.org/web/packages/eha/eha.pdf>
+2.  Survival analysis text book: <https://www.taylorfrancis.com/books/mono/10.1201/b18041/modelling-survival-data-medical-research-david-collett>
+3.  `flexsurv` package documentation: <https://cran.r-project.org/web/packages/flexsurv/refman/flexsurv.html>
+4.  Cox-Snell residuals from a parametric survival model: <https://search.r-project.org/CRAN/refmans/flexsurv/html/coxsnell_flexsurvreg.html>
+5.  `survreg` package documentation: <https://www.rdocumentation.org/packages/survival/versions/3.8-3/topics/survreg>
